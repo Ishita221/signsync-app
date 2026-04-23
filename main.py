@@ -15,8 +15,27 @@ import joblib
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 app = FastAPI(title="SignSync-Web")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["Permissions-Policy"] = "camera=*, microphone=*"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 TEMPLATES_DIR = Path("templates")
@@ -76,4 +95,31 @@ def classify_simple(hand_landmarks) -> Optional[str]:
 
 
 @app.get("/")
-def home(request: Request)
+def home(request: Request):
+    return FileResponse(TEMPLATES_DIR / "index.html")
+
+
+@app.websocket("/ws/gesture")
+async def ws_gesture(websocket: WebSocket):
+    await websocket.accept()
+
+    asl_model = None
+    if ASL_MODEL_PATH.exists():
+        try:
+            asl_model = joblib.load(ASL_MODEL_PATH)
+        except Exception:
+            asl_model = None
+
+    from mediapipe.tasks import python
+    from mediapipe.tasks.python import vision
+
+    base_options = python.BaseOptions(model_asset_path=str(MODEL_PATH))
+    options = vision.HandLandmarkerOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.IMAGE,
+        num_hands=1,
+        min_hand_detection_confidence=0.6,
+        min_hand_presence_confidence=0.6,
+        min_tracking_confidence=0.6,
+    )
+    landmarker = vision.HandLandmarker.create_from_optio
