@@ -34,6 +34,7 @@ MODEL_PATH = MODELS_DIR / "hand_landmarker.task"
 ASL_MODEL_PATH = MODELS_DIR / "asl_model.joblib"
 
 
+
 def _landmark_features(lms) -> np.ndarray:
     pts = np.array([[lm.x, lm.y, lm.z] for lm in lms], dtype=np.float32)
     pts = pts - pts[0:1, :]
@@ -48,6 +49,7 @@ def ensure_model():
     if MODEL_PATH.exists() and MODEL_PATH.stat().st_size > 0:
         return
     urlretrieve(MODEL_URL, MODEL_PATH)
+ensure_model()
 
 
 def _is_finger_extended(hand_landmarks, tip: int, pip: int) -> bool:
@@ -55,6 +57,7 @@ def _is_finger_extended(hand_landmarks, tip: int, pip: int) -> bool:
     tip_y = hand_landmarks.landmark[tip].y
     pip_y = hand_landmarks.landmark[pip].y
     return tip_y < pip_y
+    
 
 
 def classify_simple(hand_landmarks) -> Optional[str]:
@@ -94,7 +97,7 @@ def home(request: Request):
 async def ws_gesture(websocket: WebSocket):
     await websocket.accept()
 
-    ensure_model()
+    
     asl_model = None
     if ASL_MODEL_PATH.exists():
         try:
@@ -117,50 +120,45 @@ async def ws_gesture(websocket: WebSocket):
     )
     landmarker = vision.HandLandmarker.create_from_options(options)
 
-    try:
-        while True:
-            msg = await websocket.receive_text()
+    while True:
+     try:
+        msg = await websocket.receive_text()
 
-            # Expect: "data:image/jpeg;base64,...." OR raw base64
-            if "," in msg:
-                _, b64 = msg.split(",", 1)
+        if "," in msg:
+            _, b64 = msg.split(",", 1)
+        else:
+            b64 = msg
+
+        jpg = base64.b64decode(b64)
+        arr = np.frombuffer(jpg, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        if frame is None:
+            await websocket.send_json({"ok": False})
+            continue
+
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        res = landmarker.detect(mp_image)
+
+        label = None
+        if res.hand_landmarks:
+            lms = res.hand_landmarks[0]
+
+            if asl_model is not None:
+                x = _landmark_features(lms).reshape(1, -1)
+                label = str(asl_model.predict(x)[0])
             else:
-                b64 = msg
+                class _LMWrap:
+                    def __init__(self, lms_):
+                        self.landmark = lms_
 
-            jpg = base64.b64decode(b64)
-            arr = np.frombuffer(jpg, dtype=np.uint8)
-            frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-            if frame is None:
-                await websocket.send_json({"ok": False, "error": "decode_failed"})
-                continue
+                label = classify_simple(_LMWrap(lms))
 
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            res = landmarker.detect(mp_image)
+        await websocket.send_json({"ok": True, "label": label})
 
-            label = None
-            if res.hand_landmarks:
-                lms = res.hand_landmarks[0]
-                if asl_model is not None:
-                    x = _landmark_features(lms).reshape(1, -1)
-                    try:
-                        label = str(asl_model.predict(x)[0])
-                    except Exception:
-                        label = None
-                else:
-                    # fallback demo rules
-                    class _LMWrap:
-                        def __init__(self, lms_):
-                            self.landmark = lms_
-
-                    label = classify_simple(_LMWrap(lms))
-
-            await websocket.send_json({"ok": True, "label": label})
-
-    except WebSocketDisconnect:
-        return
-    finally:
-        landmarker.close()
+    except Exception as e:
+        await websocket.send_json({"ok": False, "error": str(e)})
 
 
 @app.get("/health")
