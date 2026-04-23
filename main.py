@@ -26,6 +26,10 @@ from fastapi.staticfiles import StaticFiles
 
 
 app = FastAPI(title="SignSync-Web")
+@app.get("/")
+def home():
+    return {"message": "Service is live"}
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 TEMPLATES_DIR = Path("templates")
