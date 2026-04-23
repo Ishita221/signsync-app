@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import base64
 import os
 from pathlib import Path
