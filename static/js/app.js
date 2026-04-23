@@ -166,3 +166,48 @@ textInput.addEventListener("keydown", (e) => {
 
 setStatus("bad", "Disconnected");
 gestureHint.textContent = "Click 'Start camera' to begin.";
+// ── Voice to Text ─────────────────────────────────────────
+const btnMic = document.getElementById("btnMic");
+const voiceOutput = document.getElementById("voiceOutput");
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (!SpeechRecognition) {
+  btnMic.disabled = true;
+  voiceOutput.textContent = "❌ Your browser does not support voice recognition. Use Chrome.";
+} else {
+  const recognition = new SpeechRecognition();
+  recognition.lang = "en-US";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    let transcript = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      transcript += event.results[i][0].transcript;
+    }
+    voiceOutput.textContent = transcript;
+  };
+
+  recognition.onerror = (event) => {
+    voiceOutput.textContent = `❌ Mic error: ${event.error}. Allow microphone and use Chrome.`;
+  };
+
+  recognition.onend = () => {
+    btnMic.textContent = "🎤 Start Voice";
+  };
+
+  let micActive = false;
+
+  btnMic.addEventListener("click", () => {
+    if (!micActive) {
+      recognition.start();
+      btnMic.textContent = "🔴 Stop Voice";
+      micActive = true;
+    } else {
+      recognition.stop();
+      btnMic.textContent = "🎤 Start Voice";
+      micActive = false;
+    }
+  });
+}
