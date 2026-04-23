@@ -1,18 +1,10 @@
-from flask import Flask
 
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "Hello World"
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+from pathlib import Path
 import matplotlib
 matplotlib.use('Agg')
 import base64
 import os
-from pathlib import Path
+
 from typing import Optional
 from urllib.request import urlretrieve
 
@@ -26,13 +18,14 @@ from fastapi.staticfiles import StaticFiles
 
 
 app = FastAPI(title="SignSync-Web")
-@app.get("/")
-async def home():
-    return FileResponse("templates/index.html")
+
 
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 TEMPLATES_DIR = Path("templates")
+@app.get("/")
+def home():
+    return FileResponse(TEMPLATES_DIR / "index.html")
 
 
 MODEL_URL = (
