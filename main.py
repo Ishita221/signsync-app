@@ -23,9 +23,6 @@ app = FastAPI(title="SignSync-Web")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 TEMPLATES_DIR = Path("templates")
-@app.get("/")
-def home():
-    return FileResponse(TEMPLATES_DIR / "index.html")
 
 
 MODEL_URL = (
